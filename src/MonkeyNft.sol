@@ -8,7 +8,9 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 
 contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
     // errors
-    error MonkeeyNft__ONLY_MONKE();
+    error MonkeyNft__ONLY_MONKE();
+    error MonkeyNft__InvalidRequestId();
+    error MonkeyNft__UnauthorizedTransfer();
 
     // enums
     enum MonkeyType {
@@ -48,15 +50,16 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
     event MonkeyMinted(address owner, uint256 tokenId);
 
     address public MONKE;
+    address public bananaToken;
     uint256 public s_tokenCounter;
     VrfConfig public s_vrfConfig;
-    mapping(uint256 tokenId => MonkeyTraits) public s_monkeyInfo;
+    mapping(uint256 tokenId => MonkeyTraits) private s_monkeyInfo;
     mapping(address owner => uint256[] tokenIds) public s_monkeyOwnerToTokenIds;
     mapping(uint256 requestId => address owner) public s_mintRequests;
 
     modifier onlyMonke {
         if (msg.sender != MONKE) {
-            revert MonkeeyNft__ONLY_MONKE();
+            revert MonkeyNft__ONLY_MONKE();
         } 
         _;
     }
@@ -65,6 +68,10 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
         MONKE = msg.sender;
         s_vrfConfig = _vrfConfig;
         s_tokenCounter = 1;
+    }
+
+    function setBananaTokenAddress(address _bananaToken) external onlyMonke {
+        bananaToken = _bananaToken;
     }
 
     function updateConfig(VrfConfig memory _vrfConfig) external onlyMonke {
@@ -90,7 +97,7 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
         uint256 _requestId,
         uint256[] calldata _randomWords
     ) internal override {
-        require(s_mintRequests[_requestId] != address(0), "request not found");
+        require(s_mintRequests[_requestId] != address(0), MonkeyNft__InvalidRequestId());
         address monkeyOwner = s_mintRequests[_requestId];
         _safeMint(monkeyOwner, s_tokenCounter);
         uint256 randomWord = _randomWords[0];
@@ -110,5 +117,14 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
 
         s_monkeyOwnerToTokenIds[monkeyOwner].push(tokenId);
         emit MonkeyMinted(monkeyOwner, tokenId);
+    }
+
+    function _update(address _to, uint256 _tokenId, address _auth) internal override returns (address) {
+        require(_auth == address(0) || _to == bananaToken || _auth == bananaToken, MonkeyNft__UnauthorizedTransfer());
+        return super._update(_to, _tokenId, _auth);
+    }
+
+    function getMonkeyInfo(uint256 _tokenId) external view returns (MonkeyTraits memory) {
+        return s_monkeyInfo[_tokenId];
     }
 }
