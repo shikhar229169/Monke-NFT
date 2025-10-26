@@ -3,7 +3,7 @@
 pragma solidity 0.8.28;
 
 import {Test, console} from "forge-std/Test.sol";
-import {MonkeyNft} from "../src/MonkeyNft.sol"; 
+import {MonkeyNft} from "../src/MonkeyNft.sol";
 import {BananaToken} from "../src/BananaToken.sol";
 import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 import {MockLinkToken} from "chainlink-brownie-contracts/contracts/src/v0.8/mocks/MockLinkToken.sol";
@@ -15,15 +15,15 @@ contract MonkeyNftTest is Test {
     MockLinkToken private linkToken;
     address owner;
     uint256 subId;
-    
+
     function setUp() external {
-        owner = makeAddr("owner");     
+        owner = makeAddr("owner");
         linkToken = new MockLinkToken();
         vrfCoordinator = new VRFCoordinatorV2_5Mock(10, 10, 1000000000000000);
-        
+
         subId = vrfCoordinator.createSubscription();
         vrfCoordinator.fundSubscription(subId, 10000000000e18);
-        
+
         // VRF Config
         MonkeyNft.VrfConfig memory vrfConfig = MonkeyNft.VrfConfig({
             keyHash: 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979f7e4d5e5c8d6,
@@ -33,7 +33,7 @@ contract MonkeyNftTest is Test {
             numWords: 1,
             enableNativePayment: false
         });
-        
+
         monkeyNft = new MonkeyNft(address(vrfCoordinator), vrfConfig, address(linkToken));
         bananaToken = new BananaToken(address(monkeyNft));
         monkeyNft.setBananaTokenAddress(address(bananaToken));
@@ -45,7 +45,7 @@ contract MonkeyNftTest is Test {
     function testInitialSetup() external view {
         MonkeyNft.VrfConfig memory vrfConfig = monkeyNft.getVrfConfig();
         bool consumerAdded = vrfCoordinator.consumerIsAdded(subId, address(monkeyNft));
-        
+
         assert(consumerAdded);
         assertEq(address(monkeyNft.s_vrfCoordinator()), address(vrfCoordinator));
         assertEq(vrfConfig.subId, subId);
@@ -76,7 +76,7 @@ contract MonkeyNftTest is Test {
     function testFarmMonkey() external {
         address user = makeAddr("user");
         uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
-        
+
         vm.startPrank(user);
         monkeyNft.approve(address(bananaToken), tokenId);
         bananaToken.stakeMonkey(tokenId);
@@ -138,6 +138,69 @@ contract MonkeyNftTest is Test {
         assert(farmerTraits.farmingPower <= prevFarmingPower);
     }
 
+    function testCannotRequestMintIfAlreadyOwnsNFT() external {
+        address user = makeAddr("user");
+
+        _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        vm.prank(user);
+        vm.expectRevert();
+        monkeyNft.requestMintMonkeyNft();
+    }
+
+    function testCollectBeforeMinStakingTimeDoesNothing() external {
+        address user = makeAddr("user2");
+        uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        vm.startPrank(user);
+        monkeyNft.approve(address(bananaToken), tokenId);
+        bananaToken.stakeMonkey(tokenId);
+        vm.stopPrank();
+
+        vm.prank(user);
+        bananaToken.collectFarmedBananas(tokenId);
+        BananaToken.StakingStats memory stats = bananaToken.getMonkeyStakingStats(tokenId);
+        assertEq(stats.bananaFarmed, 0);
+        assertEq(bananaToken.balanceOf(user), 0);
+    }
+
+    function testUnstakeRevertsIfNotOwner() external {
+        address user = makeAddr("user3");
+        uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        vm.startPrank(user);
+        monkeyNft.approve(address(bananaToken), tokenId);
+        bananaToken.stakeMonkey(tokenId);
+        vm.stopPrank();
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert();
+        bananaToken.unstakeMonkey(tokenId);
+    }
+
+    function testAttackCooldownBehavior() external {
+        address user = makeAddr("farmer");
+        uint256 farmerTokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        address attackerUser = makeAddr("attackerUser2");
+        uint256 chaoticTokenId = _mintMonkey(attackerUser, MonkeyNft.MonkeyType.CHAOTIC);
+
+        vm.prank(attackerUser);
+        uint256 requestId = monkeyNft.attackMonkey(chaoticTokenId);
+
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = (farmerTokenId - 1);
+        vrfCoordinator.fulfillRandomWordsWithOverride(requestId, address(monkeyNft), randomWords);
+
+        MonkeyNft.MonkeyTraits memory attackerTraits = monkeyNft.getMonkeyInfo(chaoticTokenId);
+        assert(attackerTraits.attackCooldown > block.timestamp);
+
+        vm.prank(attackerUser);
+        vm.expectRevert();
+        monkeyNft.attackMonkey(chaoticTokenId);
+    }
+
     function _mintMonkey(address user, MonkeyNft.MonkeyType monkeyType) internal returns (uint256 tokenId) {
         uint256 randomWord;
         if (monkeyType == MonkeyNft.MonkeyType.FARMER) {
@@ -152,7 +215,7 @@ contract MonkeyNftTest is Test {
         uint256 requestId = monkeyNft.requestMintMonkeyNft();
 
         uint256[] memory randomWords = new uint256[](1);
-        randomWords[0] = randomWord; 
+        randomWords[0] = randomWord;
         tokenId = monkeyNft.s_tokenCounter();
         vrfCoordinator.fulfillRandomWordsWithOverride(requestId, address(monkeyNft), randomWords);
 
