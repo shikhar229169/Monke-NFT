@@ -54,6 +54,7 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
 
     address public MONKE;
     address public bananaToken;
+    address public linkToken;
     uint256 public s_tokenCounter;
     VrfConfig public s_vrfConfig;
     mapping(uint256 tokenId => MonkeyTraits) private s_monkeyInfo;
@@ -69,10 +70,11 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
         _;
     }
 
-    constructor(address _vrfCoordinator, VrfConfig memory _vrfConfig) ERC721("MonkeyNft", "MNFT") VRFConsumerBaseV2Plus(_vrfCoordinator) {
+    constructor(address _vrfCoordinator, VrfConfig memory _vrfConfig, address _linkToken) ERC721("MonkeyNft", "MNFT") VRFConsumerBaseV2Plus(_vrfCoordinator) {
         MONKE = msg.sender;
         s_vrfConfig = _vrfConfig;
         s_tokenCounter = 1;
+        linkToken = _linkToken;
     }
 
     function setBananaTokenAddress(address _bananaToken) external onlyMonke {
@@ -91,7 +93,7 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
                 requestConfirmations: s_vrfConfig.requestConfirmations,
                 callbackGasLimit: s_vrfConfig.callbackGasLimit,
                 numWords: s_vrfConfig.numWords,
-                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: true}))
+                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: s_vrfConfig.enableNativePayment}))
             })
         );
         s_mintRequests[requestId] = msg.sender;
