@@ -87,4 +87,8 @@ contract BananaToken is ERC20, IERC721Receiver {
     ) external pure override returns (bytes4) {
         return this.onERC721Received.selector;
     }
+
+    function getMonkeyStakingStats(uint256 tokenId) external view returns (StakingStats memory) {
+        return s_monkeyStakingStats[tokenId];
+    }
 }

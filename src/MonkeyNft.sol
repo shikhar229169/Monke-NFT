@@ -41,7 +41,7 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
 
     struct VrfConfig {
         bytes32 keyHash;
-        uint64 subId;
+        uint256 subId;
         uint16 requestConfirmations;
         uint32 callbackGasLimit;
         uint32 numWords;
@@ -86,6 +86,8 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
     }
 
     function requestMintMonkeyNft() external returns (uint256 requestId) {
+        require(s_monkeyOwnerToTokenIds[msg.sender].length == 0);
+
         requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
                 keyHash: s_vrfConfig.keyHash,
@@ -118,13 +120,14 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
     }
 
     function _mintMonkeyNft(uint256 _requestId, uint256[] calldata _randomWords) internal {
+        require(s_monkeyOwnerToTokenIds[msg.sender].length == 0);
         address monkeyOwner = s_mintRequests[_requestId];
         s_mintRequests[_requestId] = address(0);
         _safeMint(monkeyOwner, s_tokenCounter);
         uint256 randomWord = _randomWords[0];
         uint256 tokenId = s_tokenCounter++;
 
-        uint256 monkeyType = randomWord % 4;
+        uint256 monkeyType = randomWord % 3;
         uint256 rarity = (randomWord >> 8) % 4;
         uint256 farmingPower = ((randomWord >> 16) % 100) + 1;
 
@@ -148,7 +151,7 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
         require(guardMonkeyInfo.monkeyType == MonkeyType.GUARDIAN && guardMonkeyInfo.owner == msg.sender, MonkeyNft__ONLY_MONKE());
         
         MonkeyTraits memory targetMonkey = s_monkeyInfo[tokenId];
-        require(!targetMonkey.isGuarded, MonkeyNft__AlreadyGuarded());
+        require(!targetMonkey.isGuarded && targetMonkey.monkeyType == MonkeyType.FARMER, MonkeyNft__AlreadyGuarded());
         s_monkeyInfo[tokenId].isGuarded = true;
     }
 
@@ -200,5 +203,13 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
 
     function getMonkeyInfo(uint256 _tokenId) external view returns (MonkeyTraits memory) {
         return s_monkeyInfo[_tokenId];
+    }
+
+    function getVrfConfig() external view returns (VrfConfig memory) {
+        return s_vrfConfig;
+    }
+
+    function getAllMonkeyNftFor(address owner) external view returns (uint256[] memory) {
+        return s_monkeyOwnerToTokenIds[owner];
     }
 }
