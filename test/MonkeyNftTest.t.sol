@@ -286,4 +286,70 @@ contract MonkeyNftTest is Test {
         MonkeyNft.MonkeyTraits memory traits = monkeyNft.getMonkeyInfo(tokenId);
         assert(traits.monkeyType == monkeyType);
     }
+
+    // access control: only MONKE (deployer) can call onlyMonke functions
+    function testOnlyMonkeCanSetBananaTokenAddress() external {
+        address attacker = makeAddr("attacker_monke");
+        vm.prank(attacker);
+        vm.expectRevert();
+        monkeyNft.setBananaTokenAddress(address(0x123));
+    }
+
+    function testAttackOnGuardedResetsGuardAndSetsTwoDayCooldown() external {
+        address farmer = makeAddr("farmerG");
+        address guardian = makeAddr("guardianG");
+        address attacker = makeAddr("attackerG");
+
+        uint256 farmerId = _mintMonkey(farmer, MonkeyNft.MonkeyType.FARMER);
+        uint256 guardianId = _mintMonkey(guardian, MonkeyNft.MonkeyType.GUARDIAN);
+        uint256 chaoticId = _mintMonkey(attacker, MonkeyNft.MonkeyType.CHAOTIC);
+
+        vm.prank(guardian);
+        monkeyNft.guardMonkey(guardianId, farmerId);
+
+        vm.prank(attacker);
+        uint256 requestId = monkeyNft.attackMonkey(chaoticId);
+
+        // confirm attack request was registered and cooldown was set to max (attack pending)
+        MonkeyNft.MonkeyTraits memory farmerTraits = monkeyNft.getMonkeyInfo(farmerId);
+        MonkeyNft.MonkeyTraits memory attackerTraits = monkeyNft.getMonkeyInfo(chaoticId);
+
+        assert(farmerTraits.isGuarded);
+        assertEq(monkeyNft.s_attackRequests(requestId), chaoticId);
+        assertEq(attackerTraits.attackCooldown, type(uint256).max);
+    }
+
+    function testTotalBananaFarmedIncrementsOnCollect() external {
+        address user = makeAddr("bananaOwner");
+        uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        vm.startPrank(user);
+        monkeyNft.approve(address(bananaToken), tokenId);
+        bananaToken.stakeMonkey(tokenId);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days);
+        uint256 before = bananaToken.s_totalBananaFarmed();
+        vm.prank(user);
+        bananaToken.collectFarmedBananas(tokenId);
+    uint256 afterTotal = bananaToken.s_totalBananaFarmed();
+
+    assertEq(afterTotal - before, 200e18);
+    }
+
+    function testGetAllMonkeyNftForMultipleUsers() external {
+        address a = makeAddr("A");
+        address b = makeAddr("B");
+
+        uint256 ta = _mintMonkey(a, MonkeyNft.MonkeyType.FARMER);
+        uint256 tb = _mintMonkey(b, MonkeyNft.MonkeyType.FARMER);
+
+        uint256[] memory tokensA = monkeyNft.getAllMonkeyNftFor(a);
+        uint256[] memory tokensB = monkeyNft.getAllMonkeyNftFor(b);
+
+        assertEq(tokensA.length, 1);
+        assertEq(tokensA[0], ta);
+        assertEq(tokensB.length, 1);
+        assertEq(tokensB[0], tb);
+    }
 }
