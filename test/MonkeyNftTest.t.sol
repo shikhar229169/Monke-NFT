@@ -19,10 +19,10 @@ contract MonkeyNftTest is Test {
     function setUp() external {
         owner = makeAddr("owner");     
         linkToken = new MockLinkToken();
-        vrfCoordinator = new VRFCoordinatorV2_5Mock(10, 10, 100000000000);
+        vrfCoordinator = new VRFCoordinatorV2_5Mock(10, 10, 1000000000000000);
         
         subId = vrfCoordinator.createSubscription();
-        vrfCoordinator.fundSubscription(subId, 10e18);
+        vrfCoordinator.fundSubscription(subId, 10000000000e18);
         
         // VRF Config
         MonkeyNft.VrfConfig memory vrfConfig = MonkeyNft.VrfConfig({
@@ -116,6 +116,26 @@ contract MonkeyNftTest is Test {
 
         MonkeyNft.MonkeyTraits memory farmerTraits = monkeyNft.getMonkeyInfo(farmerTokenId);
         assert(farmerTraits.isGuarded);
+    }
+
+    function testAttackFarmerMonkey() external {
+        address user = makeAddr("user");
+        uint256 farmerTokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        address attackerUser = makeAddr("attackerUser");
+        uint256 chaoticTokenId = _mintMonkey(attackerUser, MonkeyNft.MonkeyType.CHAOTIC);
+
+        vm.prank(attackerUser);
+        uint256 requestId = monkeyNft.attackMonkey(chaoticTokenId);
+
+        uint256 prevFarmingPower = monkeyNft.getMonkeyInfo(farmerTokenId).farmingPower;
+
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 0;
+        vrfCoordinator.fulfillRandomWordsWithOverride(requestId, address(monkeyNft), randomWords);
+
+        MonkeyNft.MonkeyTraits memory farmerTraits = monkeyNft.getMonkeyInfo(farmerTokenId);
+        assert(farmerTraits.farmingPower <= prevFarmingPower);
     }
 
     function _mintMonkey(address user, MonkeyNft.MonkeyType monkeyType) internal returns (uint256 tokenId) {

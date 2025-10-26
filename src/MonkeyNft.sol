@@ -184,10 +184,11 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
         uint256 targetTokenId = (randomWord % (s_tokenCounter - 1)) + 1;
 
         MonkeyTraits memory targetMonkey = s_monkeyInfo[targetTokenId];
-        if (targetMonkey.isGuarded) {
+        if (targetMonkey.isGuarded || targetMonkey.monkeyType != MonkeyType.FARMER) {
             s_monkeyInfo[targetTokenId].isGuarded = false;
             s_monkeyInfo[attackerTokenId].attackCooldown = block.timestamp + 2 days;
-        } else {
+        }
+        else if (targetMonkey.monkeyType == MonkeyType.FARMER) {
             s_monkeyInfo[attackerTokenId].attackCooldown = block.timestamp + 1 days;
             uint256 reduceFarmingPowerBy = randomWord % 10;
             if (s_monkeyInfo[targetTokenId].farmingPower > reduceFarmingPowerBy) {
