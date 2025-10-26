@@ -471,9 +471,9 @@ contract MonkeyNftTest is Test {
         bananaToken.collectFarmedBananas(t1);
         vm.prank(u2);
         bananaToken.collectFarmedBananas(t2);
-    uint256 afterTotal = bananaToken.s_totalBananaFarmed();
+        uint256 afterTotal = bananaToken.s_totalBananaFarmed();
 
-    assertEq(afterTotal - before, 400e18);
+        assertEq(afterTotal - before, 400e18);
         assertEq(bananaToken.balanceOf(u1), 200e18);
         assertEq(bananaToken.balanceOf(u2), 200e18);
     }
@@ -483,11 +483,11 @@ contract MonkeyNftTest is Test {
         address y = makeAddr("y");
 
         uint256 before = monkeyNft.s_tokenCounter();
-    uint256 txA = _mintMonkey(x, MonkeyNft.MonkeyType.FARMER);
-    uint256 ty = _mintMonkey(y, MonkeyNft.MonkeyType.FARMER);
-    uint256 afterCnt = monkeyNft.s_tokenCounter();
+        uint256 txA = _mintMonkey(x, MonkeyNft.MonkeyType.FARMER);
+        uint256 ty = _mintMonkey(y, MonkeyNft.MonkeyType.FARMER);
+        uint256 afterCnt = monkeyNft.s_tokenCounter();
 
-    assertEq(afterCnt - before, 2);
+        assertEq(afterCnt - before, 2);
 
         uint256[] memory ax = monkeyNft.getAllMonkeyNftFor(x);
         uint256[] memory ay = monkeyNft.getAllMonkeyNftFor(y);
@@ -513,5 +513,52 @@ contract MonkeyNftTest is Test {
         vm.prank(g);
         vm.expectRevert();
         monkeyNft.guardMonkey(guardian, chaotic);
+    }
+
+    function testGuardedMappingNotSet() external {
+        address farmer = makeAddr("farmer_map");
+        address guardian = makeAddr("guardian_map");
+
+        uint256 fid = _mintMonkey(farmer, MonkeyNft.MonkeyType.FARMER);
+        uint256 gid = _mintMonkey(guardian, MonkeyNft.MonkeyType.GUARDIAN);
+
+        vm.prank(guardian);
+        monkeyNft.guardMonkey(gid, fid);
+
+        MonkeyNft.MonkeyTraits memory mt = monkeyNft.getMonkeyInfo(fid);
+        assert(mt.isGuarded);
+        assertEq(monkeyNft.s_guardedMonkeys(gid), 0);
+    }
+
+    function testUnauthorizedTransferRevertSelector() external {
+        address alice = makeAddr("alice2");
+        address bob = makeAddr("bob2");
+
+        uint256 tok = _mintMonkey(alice, MonkeyNft.MonkeyType.FARMER);
+
+        bytes4 sel = bytes4(keccak256("MonkeyNft__UnauthorizedTransfer()"));
+        vm.prank(bob);
+        vm.expectRevert(sel);
+        monkeyNft.transferFrom(alice, bob, tok);
+    }
+
+    function testCollectNotStakedRevertsWithSelector() external {
+        address someone = makeAddr("somebody");
+        uint256 t = _mintMonkey(someone, MonkeyNft.MonkeyType.FARMER);
+
+        bytes4 sel = bytes4(keccak256("BananaToken__MonkeyNotStaked()"));
+        vm.prank(someone);
+        vm.expectRevert(sel);
+        bananaToken.collectFarmedBananas(t);
+    }
+
+    function testUpdateConfigOnlyMonkeRevertSelector() external {
+        address attacker = makeAddr("attacker_cfg");
+        MonkeyNft.VrfConfig memory cfg = monkeyNft.getVrfConfig();
+
+        bytes4 sel = bytes4(keccak256("MonkeyNft__ONLY_MONKE()"));
+        vm.prank(attacker);
+        vm.expectRevert(sel);
+        monkeyNft.updateConfig(cfg);
     }
 }
