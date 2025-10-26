@@ -423,4 +423,95 @@ contract MonkeyNftTest is Test {
 
         assertEq(monkeyNft.bananaToken(), address(bananaToken));
     }
+
+    function testUnstakeClearsStatsAndTransfers() external {
+        address user = makeAddr("unstaker");
+        uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        vm.startPrank(user);
+        monkeyNft.approve(address(bananaToken), tokenId);
+        bananaToken.stakeMonkey(tokenId);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days + 10);
+        vm.prank(user);
+        bananaToken.collectFarmedBananas(tokenId);
+
+        vm.prank(user);
+        bananaToken.unstakeMonkey(tokenId);
+
+        BananaToken.StakingStats memory stats = bananaToken.getMonkeyStakingStats(tokenId);
+        assertEq(stats.owner, address(0));
+        assertEq(stats.stakeTime, 0);
+        assertEq(stats.latestClaimTime, 0);
+        assertEq(monkeyNft.ownerOf(tokenId), user);
+    }
+
+    function testTotalBananaFarmedMultipleStakers() external {
+        address u1 = makeAddr("u1");
+        address u2 = makeAddr("u2");
+
+        uint256 t1 = _mintMonkey(u1, MonkeyNft.MonkeyType.FARMER);
+        uint256 t2 = _mintMonkey(u2, MonkeyNft.MonkeyType.FARMER);
+
+        vm.startPrank(u1);
+        monkeyNft.approve(address(bananaToken), t1);
+        bananaToken.stakeMonkey(t1);
+        vm.stopPrank();
+
+        vm.startPrank(u2);
+        monkeyNft.approve(address(bananaToken), t2);
+        bananaToken.stakeMonkey(t2);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 2 days + 5);
+
+        uint256 before = bananaToken.s_totalBananaFarmed();
+        vm.prank(u1);
+        bananaToken.collectFarmedBananas(t1);
+        vm.prank(u2);
+        bananaToken.collectFarmedBananas(t2);
+    uint256 afterTotal = bananaToken.s_totalBananaFarmed();
+
+    assertEq(afterTotal - before, 400e18);
+        assertEq(bananaToken.balanceOf(u1), 200e18);
+        assertEq(bananaToken.balanceOf(u2), 200e18);
+    }
+
+    function testMintCounterAndOwnerMapping() external {
+        address x = makeAddr("x");
+        address y = makeAddr("y");
+
+        uint256 before = monkeyNft.s_tokenCounter();
+    uint256 txA = _mintMonkey(x, MonkeyNft.MonkeyType.FARMER);
+    uint256 ty = _mintMonkey(y, MonkeyNft.MonkeyType.FARMER);
+    uint256 afterCnt = monkeyNft.s_tokenCounter();
+
+    assertEq(afterCnt - before, 2);
+
+        uint256[] memory ax = monkeyNft.getAllMonkeyNftFor(x);
+        uint256[] memory ay = monkeyNft.getAllMonkeyNftFor(y);
+        assertEq(ax.length, 1);
+        assertEq(ay.length, 1);
+        assertEq(ax[0], txA);
+        assertEq(ay[0], ty);
+    }
+
+    function testGetMonkeyInfoForNonexistentToken() external view {
+        MonkeyNft.MonkeyTraits memory traits = monkeyNft.getMonkeyInfo(9999);
+        assertEq(traits.owner, address(0));
+        assertEq(traits.creationTimestamp, 0);
+    }
+
+    function testGuardCannotGuardNonFarmerReverts() external {
+        address g = makeAddr("g");
+        address other = makeAddr("other");
+
+        uint256 guardian = _mintMonkey(g, MonkeyNft.MonkeyType.GUARDIAN);
+        uint256 chaotic = _mintMonkey(other, MonkeyNft.MonkeyType.CHAOTIC);
+
+        vm.prank(g);
+        vm.expectRevert();
+        monkeyNft.guardMonkey(guardian, chaotic);
+    }
 }
