@@ -167,7 +167,7 @@ contract MonkeyNft is ERC721, VRFConsumerBaseV2Plus {
                 requestConfirmations: s_vrfConfig.requestConfirmations,
                 callbackGasLimit: s_vrfConfig.callbackGasLimit,
                 numWords: s_vrfConfig.numWords,
-                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: true}))
+                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: s_vrfConfig.enableNativePayment}))
             })
         );
 
