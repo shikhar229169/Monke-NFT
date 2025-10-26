@@ -201,6 +201,70 @@ contract MonkeyNftTest is Test {
         monkeyNft.attackMonkey(chaoticTokenId);
     }
 
+    function testMintTraitsBounds() external {
+        address user = makeAddr("user_bounds");
+        uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        MonkeyNft.MonkeyTraits memory traits = monkeyNft.getMonkeyInfo(tokenId);
+        assert(traits.farmingPower >= 1 && traits.farmingPower <= 100);
+        assert(uint256(traits.rarity) <= 3);
+        assert(traits.creationTimestamp > 0);
+    }
+
+    function testGuardRevertsIfNotOwner() external {
+        address ownerA = makeAddr("ownerA");
+        address ownerB = makeAddr("ownerB");
+
+        uint256 guardianTokenId = _mintMonkey(ownerA, MonkeyNft.MonkeyType.GUARDIAN);
+        uint256 farmerTokenId = _mintMonkey(ownerB, MonkeyNft.MonkeyType.FARMER);
+
+        vm.prank(ownerB);
+        vm.expectRevert();
+        monkeyNft.guardMonkey(guardianTokenId, farmerTokenId);
+    }
+
+    function testGuardRevertsIfAlreadyGuarded() external {
+        address farmerOwner = makeAddr("ownerG");
+        address guardianOwner = makeAddr("guardG");
+
+        uint256 farmerTokenId = _mintMonkey(farmerOwner, MonkeyNft.MonkeyType.FARMER);
+        uint256 guardianTokenId = _mintMonkey(guardianOwner, MonkeyNft.MonkeyType.GUARDIAN);
+
+        vm.prank(guardianOwner);
+        monkeyNft.guardMonkey(guardianTokenId, farmerTokenId);
+
+        vm.prank(guardianOwner);
+        vm.expectRevert();
+        monkeyNft.guardMonkey(guardianTokenId, farmerTokenId);
+    }
+
+    function testOnlyFarmerCanStakeReverts() external {
+        address user = makeAddr("notFarmer");
+        uint256 chaoticTokenId = _mintMonkey(user, MonkeyNft.MonkeyType.CHAOTIC);
+
+        vm.startPrank(user);
+        monkeyNft.approve(address(bananaToken), chaoticTokenId);
+        vm.expectRevert();
+        bananaToken.stakeMonkey(chaoticTokenId);
+        vm.stopPrank();
+    }
+
+    function testPartialDayCollectMintsOneDay() external {
+        address user = makeAddr("staker");
+        uint256 tokenId = _mintMonkey(user, MonkeyNft.MonkeyType.FARMER);
+
+        vm.startPrank(user);
+        monkeyNft.approve(address(bananaToken), tokenId);
+        bananaToken.stakeMonkey(tokenId);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 36 hours);
+        vm.prank(user);
+        bananaToken.collectFarmedBananas(tokenId);
+
+        assertEq(bananaToken.balanceOf(user), 100e18);
+    }
+
     function _mintMonkey(address user, MonkeyNft.MonkeyType monkeyType) internal returns (uint256 tokenId) {
         uint256 randomWord;
         if (monkeyType == MonkeyNft.MonkeyType.FARMER) {
